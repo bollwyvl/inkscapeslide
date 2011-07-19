@@ -33,6 +33,7 @@ def main():
     usage = "Usage: %prog [options] svgfilename"
     parser = OptionParser(usage=usage)
     parser.add_option("-i", "--imageexport", action="store_true", dest="imageexport", default=False, help="Use PNG files as export content")
+    parser.add_option("-J", "--nojoin", action="store_true", dest="nojoin", default=False, help="Do not join resulting PDFs or PNGs")
     (options, args) = parser.parse_args()
 
     FILENAME = args[0]
@@ -148,7 +149,7 @@ def main():
         # Use the correct extension if using images
         if options.imageexport:
             pdfslide = os.path.abspath(os.path.join(os.curdir,
-                                                ".inkscapeslide_%s.p%05d.png" % (FILENAME, i)))
+                                                "_inkscapeslide_%s.p%05d.png" % (FILENAME, i)))
 
         # Write the XML to file, "wireframes.p1.svg"
         f = open(svgslide, 'w')
@@ -172,12 +173,12 @@ def main():
     outputDir = os.path.dirname(outputFilename)
     print "Output file %s" % outputFilename
 
-    if options.imageexport:
+    if options.imageexport and not options.nojoin:
         # Use ImageMagick to combine the PNG files into a PDF
-        if not os.system('which convert > /dev/null'):
-            print "Using 'convert' to join PNG's"
-            pngPath = os.path.join(outputDir, ".inkscapeslide_*.png")
-            proc = subprocess.Popen("convert %s -resample 180 %s" % (pngPath, outputFilename),
+        if not os.system('which convert > /dev/null') or not os.system('convert -version'):
+            print "Using 'convert' to convert PNG's"
+            pngPath = os.path.join(outputDir, "_inkscapeslide_*.png")
+            proc = subprocess.Popen('convert "%s" -resample 180 "%s"' % (pngPath, outputFilename),
                                     shell=True,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
@@ -190,7 +191,7 @@ def main():
                 joinedpdf = True
         else:
             print "Please install ImageMagick to provide the 'convert' utility"
-    else:
+    elif not options.nojoin:
         # Join PDFs
         has_pyPdf = False
         try:
@@ -235,6 +236,6 @@ def main():
                 "package, to join PDFs."
 
     # Clean up
-    if joinedpdf:
+    if joinedpdf and not options.nojoin:
         for pdfslide in pdfslides:
             os.unlink(pdfslide)
