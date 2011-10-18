@@ -25,6 +25,8 @@ import re
 import warnings
 from optparse import OptionParser
 
+from fields import ReplacementField
+
 try:
     import pyPdf
 except:
@@ -42,7 +44,11 @@ def main():
     parser = OptionParser(usage=usage)
     parser.add_option("-i", "--imageexport", action="store_true", dest="imageexport", default=False, help="Use PNG files as export content")
     parser.add_option("-J", "--nojoin", action="store_true", dest="nojoin", default=False, help="Do not join resulting PDFs or PNGs")
+    
     (options, args) = parser.parse_args()
+    if not args:
+        print parser.print_help()
+        sys.exit(1)
     
     options.filename = args[0]
     
@@ -62,30 +68,6 @@ def set_style(el, style, value):
                                     r'\1%s\3' % value, el.attrib['style'])
     else:
         el.attrib['style'] = '%s:%s;%s' % (style, value, el.attrib['style'])
-
-class ReplacementField(object):
-    pattern = None
-    def match(self, text):
-        return self.pattern.match(text)
-    def replace(self, maker, text):
-        return text
-
-class PageNumberField(ReplacementField):
-    pattern = r'\{\{\\s*#PAGE#\s*\}\}'
-    def replace(self, maker, text, slide_num):
-        return re.sub(self.pattern, slide_num, text)
-
-class NumberOfPagesField(ReplacementField):
-    pattern = r'\{\{\s*#PAGES#\s*\}\}'
-    def replace(self, maker, text):
-        return re.sub(self.pattern, len(maker.slides), text)
-
-class DateField(ReplacementField):
-    from datetime import date, now
-    pattern = r'\{\{\s*#DATE\s*([^\}]*)#\s*\}\}'
-    def replace(self, maker, text):
-        fmt = re.search(self.pattern).group(0)
-        return re.sub(self.pattern, now().strftime(fmt), text)
         
 class InkscapeSlideMaker(object):
     def __init__(self, options):
@@ -129,6 +111,7 @@ The opacity of a layer can be set to 50% for example by adding
         self.orig_style = {}
         self.slides = []
         self.pdfslides = []
+        self.slide_number = 0
         
                                                 
         self.joinedpdf = False
@@ -167,6 +150,13 @@ The opacity of a layer can be set to 50% for example by adding
 
 
         for i, slide_layers in enumerate(self.slides):
+            # Increase slide numbers 
+            self.slide_number += 1
+            for l in self.layers:
+                for text in l.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan'))):
+                    for field in reversed(ReplacementField.__subclasses__()):
+                        field.restore(text)
+            
             for l in self.layers:
                 label = l.attrib.get(e(NS['ink'],'label'))
                 # Set display mode to original
@@ -180,11 +170,14 @@ The opacity of a layer can be set to 50% for example by adding
                     opacity = slide_layers[label]['opacity']
                     if opacity:
                         set_style(l, 'opacity', str(opacity))
+                        
                 # Update field values
-                texts = self.content.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan')))
-                for field in ReplacementField.__subclasses__:
-                    field_texts = [x.text for x in Update if field.match(x.text)]
+                texts = l.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan')))
+                for field in ReplacementField.__subclasses__():
+                    field_texts = [x for x in texts if field.match(x.text)]
                     
+                    for field_text in field_texts:
+                        field.replace(field_text, self)
                     
             
             svgslide = os.path.abspath(os.path.join(os.curdir,
