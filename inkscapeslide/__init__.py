@@ -63,6 +63,30 @@ def set_style(el, style, value):
     else:
         el.attrib['style'] = '%s:%s;%s' % (style, value, el.attrib['style'])
 
+class ReplacementField(object):
+    pattern = None
+    def match(self, text):
+        return self.pattern.match(text)
+    def replace(self, maker, text):
+        return text
+
+class PageNumberField(ReplacementField):
+    pattern = r'\{\{\\s*#PAGE#\s*\}\}'
+    def replace(self, maker, text, slide_num):
+        return re.sub(self.pattern, slide_num, text)
+
+class NumberOfPagesField(ReplacementField):
+    pattern = r'\{\{\s*#PAGES#\s*\}\}'
+    def replace(self, maker, text):
+        return re.sub(self.pattern, len(maker.slides), text)
+
+class DateField(ReplacementField):
+    from datetime import date, now
+    pattern = r'\{\{\s*#DATE\s*([^\}]*)#\s*\}\}'
+    def replace(self, maker, text):
+        fmt = re.search(self.pattern).group(0)
+        return re.sub(self.pattern, now().strftime(fmt), text)
+        
 class InkscapeSlideMaker(object):
     def __init__(self, options):
         self.doc = lxml.etree.parse(options.filename)
@@ -98,8 +122,8 @@ The opacity of a layer can be set to 50% for example by adding
 
 
         if not self.preslides:
-            print "Make sure you have a text box (with no flowRect) in the " \
-                "'content' layer, and rerun this program."
+            print """Make sure you have a text box (with no flowRect) in the
+                'content' layer, and rerun this program."""
             sys.exit(1)
         
         self.orig_style = {}
@@ -116,7 +140,7 @@ The opacity of a layer can be set to 50% for example by adding
     def make(self):
         # Get the initial style attribute and keep it
         for l in self.layers:
-            label = l.attrib.get('{http://www.inkscape.org/namespaces/inkscape}label') 
+            label = l.attrib.get(e(NS['ink'],'label')) 
             if 'style' not in l.attrib:
                 l.set('style', '')
             # Save initial values
@@ -157,6 +181,11 @@ The opacity of a layer can be set to 50% for example by adding
                     if opacity:
                         set_style(l, 'opacity', str(opacity))
                 # Update field values
+                texts = self.content.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan')))
+                for field in ReplacementField.__subclasses__:
+                    field_texts = [x.text for x in Update if field.match(x.text)]
+                    
+                    
             
             svgslide = os.path.abspath(os.path.join(os.curdir,
                                                     "%s.p%d.svg" % (self.options.filename, i)))
@@ -236,8 +265,7 @@ The opacity of a layer can be set to 50% for example by adding
                                                            FILENAME.split(".svg")[0]))
                 self.joinedpdf = True
             else:
-                print "Please install pdfjam, pdftk or install the 'pyPdf' python " \
-                    "package, to join PDFs."
+                print "Please install pdfjam, pdftk or install the 'pyPdf' python package, to join PDFs."
 
         # Clean up
         if self.joinedpdf and not self.options.nojoin:
