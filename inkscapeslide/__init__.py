@@ -45,7 +45,11 @@ def main():
     parser.add_option("-i", "--imageexport", action="store_true", dest="imageexport", default=False, help="Use PNG files as export content")
     parser.add_option("-J", "--nojoin", action="store_true", dest="nojoin", default=False, help="Do not join resulting PDFs or PNGs")
     
+    for field in ReplacementField.__subclasses__():
+        field.install(parser)
+    
     (options, args) = parser.parse_args()
+
     if not args:
         print parser.print_help()
         sys.exit(1)
@@ -121,6 +125,12 @@ The opacity of a layer can be set to 50% for example by adding
         self.pngPath = os.path.join(self.outputDir, "_inkscapeslide_*.png")
             
     def make(self):
+    
+        # Text which might have fields
+        def find_texts(layer):
+            return layer.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan'))) + \
+                    layer.findall('%s/%s' % (e(NS['svg'],'flowRoot'), e(NS['svg'],'flowPara')))
+    
         # Get the initial style attribute and keep it
         for l in self.layers:
             label = l.attrib.get(e(NS['ink'],'label')) 
@@ -153,7 +163,7 @@ The opacity of a layer can be set to 50% for example by adding
             # Increase slide numbers 
             self.slide_number += 1
             for l in self.layers:
-                for text in l.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan'))):
+                for text in find_texts(l):
                     for field in reversed(ReplacementField.__subclasses__()):
                         field.restore(text)
             
@@ -172,7 +182,7 @@ The opacity of a layer can be set to 50% for example by adding
                         set_style(l, 'opacity', str(opacity))
                         
                 # Update field values
-                texts = l.findall('%s/%s' % (e(NS['svg'],'text'), e(NS['svg'],'tspan')))
+                texts = find_texts(l)
                 for field in ReplacementField.__subclasses__():
                     field_texts = [x for x in texts if field.match(x.text)]
                     
